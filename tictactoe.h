@@ -97,12 +97,18 @@ constexpr std::array<Position, 4> corners = {{{0, 0}, {0, 2}, {2, 0}, {2, 2}}};
 // Create an empty board
 Board emptyBoard();
 
-// Get the cell at a position
-Cell getCell(const Board& board, int row, int col);
+// Get the cell at a position (using Position type)
+Cell getCell(const Board& board, Position pos);
+
+// Check if a position is valid (within board bounds)
+bool isValidPosition(Position pos);
+
+// Check if a position is empty on the board
+bool isEmpty(const Board& board, Position pos);
 
 // Make a move - returns NEW board (doesn't modify input!)
 // Returns nullopt if the move is invalid
-std::optional<Board> makeMove(const Board& board, int row, int col, Cell player);
+std::optional<Board> makeMove(const Board& board, Position pos, Cell player);
 
 // Check for winner - returns Cell::X, Cell::O, or Cell::Empty (no winner)
 Cell checkWinner(const Board& board);
@@ -143,6 +149,41 @@ Cell lineWinner(const Board& board, const std::array<Position, 3>& line);
 
 // Check if a line is a winning line (returns bool)
 bool isWinningLine(const Board& board, const std::array<Position, 3>& line);
+
+// ============================================================================
+// Functional Combinators
+//
+// These functions let us write expression-based code without statements.
+// Instead of:
+//   auto it = std::find_if(container.begin(), container.end(), pred);
+//   return (it != container.end()) ? *it : defaultValue;
+//
+// We write:
+//   return findFirstOr(container, pred, defaultValue);
+//
+// This is how functional languages work - everything is an expression.
+// ============================================================================
+
+// Find first element matching predicate, or return default
+template<typename Container, typename Pred>
+typename Container::value_type findFirstOr(
+    const Container& container,
+    Pred predicate,
+    typename Container::value_type defaultValue);
+
+// Filter container, returning new vector of matching elements
+template<typename Container, typename Pred>
+std::vector<typename Container::value_type> filter(
+    const Container& container,
+    Pred predicate);
+
+// Find first element matching predicate, or call fallback function
+// The fallback is only evaluated if no match is found (lazy evaluation)
+template<typename Container, typename Pred, typename Fallback>
+typename Container::value_type findFirstOrElse(
+    const Container& container,
+    Pred predicate,
+    Fallback fallback);
 
 // ============================================================================
 // Higher-Order Functions - functions that take/return functions

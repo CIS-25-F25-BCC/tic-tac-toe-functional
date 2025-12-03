@@ -18,7 +18,8 @@ int main() {
     std::cout << "Empty board:\n" << boardToString(empty) << "\n";
 
     // Make a move - returns NEW board, doesn't modify empty!
-    auto afterX = makeMove(empty, 0, 0, Cell::X);
+    // Using Position type for all board positions
+    std::optional<Board> afterX = makeMove(empty, Position{0, 0}, Cell::X);
     if (afterX) {
         std::cout << "After X plays (0,0):\n" << boardToString(*afterX) << "\n";
     }
@@ -26,11 +27,11 @@ int main() {
     // empty is STILL empty!
     std::cout << "Original 'empty' board is unchanged:\n" << boardToString(empty) << "\n";
 
-    // Chain more moves
-    auto afterO = makeMove(*afterX, 1, 1, Cell::O);
-    auto afterX2 = makeMove(*afterO, 0, 1, Cell::X);
-    auto afterO2 = makeMove(*afterX2, 2, 2, Cell::O);
-    auto afterX3 = makeMove(*afterO2, 0, 2, Cell::X);  // X wins!
+    // Chain more moves - each returns a new optional<Board>
+    std::optional<Board> afterO = makeMove(*afterX, Position{1, 1}, Cell::O);
+    std::optional<Board> afterX2 = makeMove(*afterO, Position{0, 1}, Cell::X);
+    std::optional<Board> afterO2 = makeMove(*afterX2, Position{2, 2}, Cell::O);
+    std::optional<Board> afterX3 = makeMove(*afterO2, Position{0, 2}, Cell::X);  // X wins!
 
     std::cout << "Final board (X wins!):\n" << boardToString(*afterX3) << "\n";
     std::cout << "Winner: " << cellToChar(checkWinner(*afterX3)) << "\n\n";
@@ -58,15 +59,15 @@ int main() {
     std::cout << "O can play in different positions. Let's explore:\n\n";
 
     // Branch 1: O plays center
-    auto branch1 = makeMove(*afterX, 1, 1, Cell::O);
+    std::optional<Board> branch1 = makeMove(*afterX, Position{1, 1}, Cell::O);
     std::cout << "Branch 1 - O plays center (1,1):\n" << boardToString(*branch1) << "\n";
 
     // Branch 2: O plays corner
-    auto branch2 = makeMove(*afterX, 2, 2, Cell::O);
+    std::optional<Board> branch2 = makeMove(*afterX, Position{2, 2}, Cell::O);
     std::cout << "Branch 2 - O plays corner (2,2):\n" << boardToString(*branch2) << "\n";
 
     // Branch 3: O plays edge
-    auto branch3 = makeMove(*afterX, 0, 1, Cell::O);
+    std::optional<Board> branch3 = makeMove(*afterX, Position{0, 1}, Cell::O);
     std::cout << "Branch 3 - O plays edge (0,1):\n" << boardToString(*branch3) << "\n";
 
     std::cout << "All branches exist simultaneously!\n";
@@ -83,19 +84,19 @@ int main() {
     std::cout << "Playing 3 games with different strategy combinations:\n\n";
 
     // Game 1: Random vs Random
-    auto [board1, winner1] = playGame(randomStrategy, randomStrategy);
-    std::cout << "Game 1 (Random vs Random):\n" << boardToString(board1);
-    std::cout << "Winner: " << (winner1 == Cell::Empty ? "Draw" : std::string(1, cellToChar(winner1))) << "\n\n";
+    std::pair<Board, Cell> game1 = playGame(randomStrategy, randomStrategy);
+    std::cout << "Game 1 (Random vs Random):\n" << boardToString(game1.first);
+    std::cout << "Winner: " << (game1.second == Cell::Empty ? "Draw" : std::string(1, cellToChar(game1.second))) << "\n\n";
 
     // Game 2: Center-First vs Random
-    auto [board2, winner2] = playGame(centerFirstStrategy, randomStrategy);
-    std::cout << "Game 2 (Center-First vs Random):\n" << boardToString(board2);
-    std::cout << "Winner: " << (winner2 == Cell::Empty ? "Draw" : std::string(1, cellToChar(winner2))) << "\n\n";
+    std::pair<Board, Cell> game2 = playGame(centerFirstStrategy, randomStrategy);
+    std::cout << "Game 2 (Center-First vs Random):\n" << boardToString(game2.first);
+    std::cout << "Winner: " << (game2.second == Cell::Empty ? "Draw" : std::string(1, cellToChar(game2.second))) << "\n\n";
 
     // Game 3: Center-First vs Center-First
-    auto [board3, winner3] = playGame(centerFirstStrategy, centerFirstStrategy);
-    std::cout << "Game 3 (Center-First vs Center-First):\n" << boardToString(board3);
-    std::cout << "Winner: " << (winner3 == Cell::Empty ? "Draw" : std::string(1, cellToChar(winner3))) << "\n\n";
+    std::pair<Board, Cell> game3 = playGame(centerFirstStrategy, centerFirstStrategy);
+    std::cout << "Game 3 (Center-First vs Center-First):\n" << boardToString(game3.first);
+    std::cout << "Winner: " << (game3.second == Cell::Empty ? "Draw" : std::string(1, cellToChar(game3.second))) << "\n\n";
 
     // ========================================================================
     // Summary

@@ -145,6 +145,49 @@
 // ============================================================================
 
 // ============================================================================
+// Functional Combinator Implementations
+//
+// These template functions let us write expression-based code.
+// They wrap STL algorithms into single-expression forms.
+// ============================================================================
+
+template<typename Container, typename Pred>
+typename Container::value_type findFirstOr(
+    const Container& container,
+    Pred predicate,
+    typename Container::value_type defaultValue) {
+    // Find first matching element or return default - single expression
+    typename Container::const_iterator it = std::find_if(
+        container.begin(), container.end(), predicate);
+    return (it != container.end()) ? *it : defaultValue;
+}
+
+template<typename Container, typename Pred>
+std::vector<typename Container::value_type> filter(
+    const Container& container,
+    Pred predicate) {
+    // Filter elements matching predicate - single expression using IIFE
+    return [&]() {
+        std::vector<typename Container::value_type> result;
+        std::copy_if(container.begin(), container.end(),
+            std::back_inserter(result), predicate);
+        return result;
+    }();
+}
+
+template<typename Container, typename Pred, typename Fallback>
+typename Container::value_type findFirstOrElse(
+    const Container& container,
+    Pred predicate,
+    Fallback fallback) {
+    // Find first matching element, or call fallback function
+    // Fallback is only called if nothing matches (lazy evaluation)
+    typename Container::const_iterator it = std::find_if(
+        container.begin(), container.end(), predicate);
+    return (it != container.end()) ? *it : fallback();
+}
+
+// ============================================================================
 // Pure Functions Implementation
 // ============================================================================
 
@@ -175,11 +218,20 @@ Cell charToCell(char c) {
          : Cell::Empty;
 }
 
-// Get cell at position - single expression, no if statements
-Cell getCell(const Board& board, int row, int col) {
-    return (row >= 0 && row < 3 && col >= 0 && col < 3)
-        ? board[row][col]
-        : Cell::Empty;
+// ============================================================================
+// Position Helper Functions
+// ============================================================================
+
+bool isValidPosition(Position pos) {
+    return pos.row >= 0 && pos.row < 3 && pos.col >= 0 && pos.col < 3;
+}
+
+Cell getCell(const Board& board, Position pos) {
+    return isValidPosition(pos) ? board[pos.row][pos.col] : Cell::Empty;
+}
+
+bool isEmpty(const Board& board, Position pos) {
+    return getCell(board, pos) == Cell::Empty;
 }
 
 // ============================================================================
@@ -194,12 +246,12 @@ Cell getCell(const Board& board, int row, int col) {
 // This pattern lets us use local variables inside an expression context.
 // ============================================================================
 
-std::optional<Board> makeMove(const Board& board, int row, int col, Cell player) {
+std::optional<Board> makeMove(const Board& board, Position pos, Cell player) {
     // Single expression: validate position AND cell is empty, then create new board
-    return (row >= 0 && row < 3 && col >= 0 && col < 3 && board[row][col] == Cell::Empty)
+    return (isValidPosition(pos) && isEmpty(board, pos))
         ? std::optional{[&]() {
             Board newBoard = board;  // Copy the board
-            newBoard[row][col] = player;  // Place the piece
+            newBoard[pos.row][pos.col] = player;  // Place the piece
             return newBoard;
           }()}  // IIFE: immediately invoke the lambda to get the new board
         : std::nullopt;
@@ -226,17 +278,13 @@ std::optional<Board> makeMove(const Board& board, int row, int col, Cell player)
 // Helper function: Check if all cells in a line have the same (non-empty) value
 // Takes a board and a line (3 positions), returns the winner (Cell::X/Cell::O) or Cell::Empty
 Cell lineWinner(const Board& board, const std::array<Position, 3>& line) {
-    Cell first = board[line[0].row][line[0].col];
-
-    // A line is a winner if:
-    //   1. The first cell is not empty (first != Cell::Empty)
-    //   2. ALL cells in the line match the first cell
-    // This is a single expression using && for short-circuit evaluation
-    return (first != Cell::Empty &&
+    // Single expression: get first cell, check if non-empty and all match
+    // Using getCell for consistency with Position-based access
+    return (getCell(board, line[0]) != Cell::Empty &&
             std::all_of(line.begin(), line.end(), [&](const Position& p) {
-                return board[p.row][p.col] == first;
+                return getCell(board, p) == getCell(board, line[0]);
             }))
-        ? first
+        ? getCell(board, line[0])
         : Cell::Empty;
 }
 
@@ -277,32 +325,22 @@ bool isWinningLine(const Board& board, const std::array<Position, 3>& line) {
 // ============================================================================
 
 Cell checkWinner(const Board& board) {
-    // Find the first winning line (if any exists)
-    // winningLines contains all 8 possible lines (3 rows, 3 cols, 2 diagonals)
+    // Find the first winning line (if any exists) and return the winner
+    // Using findFirstOr combinator - pure expression, no intermediate variables
     //
-    // The lambda [&](const auto& line) { return isWinningLine(board, line); }
-    // creates a predicate that checks each line against our board
-    auto it = std::find_if(winningLines.begin(), winningLines.end(),
-        [&](const auto& line) { return isWinningLine(board, line); });
-
-    // If found (it != end), get the winner from that line
-    // If not found, return Cell::Empty (no winner)
-    return (it != winningLines.end()) ? lineWinner(board, *it) : Cell::Empty;
+    // We find the first line that has a winner, defaulting to an empty line
+    // Then get the winner from that line (will be Cell::Empty if no winner)
+    return lineWinner(board,
+        findFirstOr(winningLines,
+            [&](const std::array<Position, 3>& line) { return isWinningLine(board, line); },
+            std::array<Position, 3>{{{0,0}, {0,0}, {0,0}}}));  // Default: dummy line
 }
 
 bool isFull(const Board& board) {
-    // Check if ALL positions have a non-empty cell
-    //
-    // allPositions.begin() = iterator to {0,0}
-    // allPositions.end()   = iterator past {2,2}
-    //
-    // For each Position p in allPositions:
-    //   - The lambda checks: is board[p.row][p.col] not empty?
-    //   - If ALL return true, the board is full
-    //
-    // The [&] lets the lambda access 'board' from the outer scope
+    // Check if ALL positions are non-empty
+    // Using isEmpty helper for Position-based access
     return std::all_of(allPositions.begin(), allPositions.end(),
-        [&](const Position& p) { return board[p.row][p.col] != Cell::Empty; });
+        [&](const Position& p) { return !isEmpty(board, p); });
 }
 
 bool isGameOver(const Board& board) {
@@ -334,14 +372,9 @@ Cell nextPlayer(Cell current) {
 
 int countMoves(const Board& board) {
     // Count how many positions have a piece (X or O)
-    //
-    // For each Position p in allPositions:
-    //   - The lambda checks: is board[p.row][p.col] not empty?
-    //   - If true, that position is counted
-    //
-    // Returns the total number of moves made so far
+    // Using isEmpty helper for consistency with Position-based access
     return std::count_if(allPositions.begin(), allPositions.end(),
-        [&](const Position& p) { return board[p.row][p.col] != Cell::Empty; });
+        [&](const Position& p) { return !isEmpty(board, p); });
 }
 
 // ============================================================================
@@ -368,30 +401,21 @@ int countMoves(const Board& board) {
 // ============================================================================
 
 std::vector<Position> getValidMoves(const Board& board) {
-    // Build a list of all empty positions (valid moves)
-    //
-    // For each Position p in allPositions:
-    //   - The lambda checks: is board[p.row][p.col] empty?
-    //   - If true, that position is added to 'moves'
-    //
-    // std::back_inserter(moves) means: for each match, call moves.push_back(p)
-    std::vector<Position> moves;
-    std::copy_if(allPositions.begin(), allPositions.end(),
-        std::back_inserter(moves),
-        [&](const Position& p) { return board[p.row][p.col] == Cell::Empty; });
-    return moves;
+    // Return all empty positions (valid moves)
+    // Using filter combinator - single expression, no intermediate variables
+    return filter(allPositions,
+        [&](const Position& p) { return isEmpty(board, p); });
+}
+
+// Helper: convert one row to a string (defined at file scope to avoid statement)
+std::string rowToString(const std::array<Cell, 3>& row) {
+    return " " + std::string(1, cellToChar(row[0])) + " | " +
+           std::string(1, cellToChar(row[1])) + " | " +
+           std::string(1, cellToChar(row[2])) + "\n";
 }
 
 std::string boardToString(const Board& board) {
-    // Helper function to convert one row to a string
-    // Uses cellToChar to convert Cell enum to display character
-    auto rowToString = [](const std::array<Cell, 3>& row) {
-        return " " + std::string(1, cellToChar(row[0])) + " | " +
-               std::string(1, cellToChar(row[1])) + " | " +
-               std::string(1, cellToChar(row[2])) + "\n";
-    };
-
-    // Compose the rows together with separators
+    // Single expression: compose rows with separators
     return rowToString(board[0]) + "---|---|---\n" +
            rowToString(board[1]) + "---|---|---\n" +
            rowToString(board[2]);
@@ -428,9 +452,10 @@ Strategy selectStrategy(Cell player, Strategy xStrategy, Strategy oStrategy) {
 // This is an internal function - users call playGame() instead
 std::pair<Board, Cell> playGameStep(const Board& board, Cell player,
                                      Strategy xStrategy, Strategy oStrategy) {
-    // Single expression using nested ternary operators
-    // This structure mirrors how you'd write it in a functional language:
+    // Single expression using nested ternary and function composition
+    // No intermediate variables - everything flows through function calls
     //
+    // This structure mirrors how you'd write it in a functional language:
     //   playGameStep board player xStrat oStrat =
     //     if isGameOver board
     //       then (board, checkWinner board)
@@ -438,11 +463,13 @@ std::pair<Board, Cell> playGameStep(const Board& board, Cell player,
     //              Just newBoard -> playGameStep newBoard (nextPlayer player) xStrat oStrat
     //              Nothing -> (board, Empty)
     //
+    // Note: C++23 has .transform() but we use IIFE for C++17 compatibility
     return isGameOver(board)
         ? std::pair{board, checkWinner(board)}
         : [&]() {
-            Position move = selectStrategy(player, xStrategy, oStrategy)(board, player);
-            auto newBoard = makeMove(board, move.row, move.col, player);
+            std::optional<Board> newBoard = makeMove(board,
+                selectStrategy(player, xStrategy, oStrategy)(board, player),
+                player);
             return newBoard
                 ? playGameStep(*newBoard, nextPlayer(player), xStrategy, oStrategy)
                 : std::pair{board, Cell::Empty};
@@ -463,37 +490,37 @@ std::pair<Board, Cell> playGame(Strategy xStrategy, Strategy oStrategy) {
 
 Position randomStrategy(const Board& board, Cell player) {
     (void)player;  // Unused - strategy doesn't depend on which player
-    auto moves = getValidMoves(board);
-    // Single expression: empty check with ternary
-    return moves.empty()
-        ? Position{-1, -1}
-        : moves[rand() % moves.size()];
+    // Single expression using IIFE to avoid intermediate variable
+    return [&]() {
+        std::vector<Position> moves = getValidMoves(board);
+        return moves.empty()
+            ? Position{-1, -1}
+            : moves[rand() % moves.size()];
+    }();
 }
 
 Position firstAvailableStrategy(const Board& board, Cell player) {
     (void)player;  // Unused
-    auto moves = getValidMoves(board);
-    // Single expression: return first move or invalid position
-    return moves.empty()
-        ? Position{-1, -1}
-        : moves[0];
+    // Single expression using IIFE
+    return [&]() {
+        std::vector<Position> moves = getValidMoves(board);
+        return moves.empty()
+            ? Position{-1, -1}
+            : moves[0];
+    }();
 }
 
 Position centerFirstStrategy(const Board& board, Cell player) {
     (void)player;  // Unused
     // Nested ternary expression: try center, then corners, then first available
+    // Using isEmpty for Position-based access and findFirstOrElse combinator
     //
     // This reads as:
     //   if center is empty then center
-    //   else if any corner is empty then that corner
-    //   else first available move
-    return (board[1][1] == Cell::Empty)
+    //   else find first empty corner, falling back to first available move
+    return isEmpty(board, Position{1, 1})
         ? Position{1, 1}
-        : [&]() {
-            auto it = std::find_if(corners.begin(), corners.end(),
-                [&](const Position& p) { return board[p.row][p.col] == Cell::Empty; });
-            return (it != corners.end())
-                ? *it
-                : firstAvailableStrategy(board, player);
-          }();
+        : findFirstOrElse(corners,
+              [&](const Position& p) { return isEmpty(board, p); },
+              [&]() { return firstAvailableStrategy(board, player); });
 }
