@@ -1,0 +1,17 @@
+# Build directory
+build/
+cmake-build-*/
+
+# Compiled files
+*.o
+*.out
+tictactoe_functional
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*~
+
+# macOS
+.DS_Store
