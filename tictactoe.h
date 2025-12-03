@@ -48,6 +48,31 @@
 // ============================================================================
 enum class Cell { Empty, X, O };
 
+// ============================================================================
+// TYPE ALIASES WITH 'using'
+//
+// The 'using' keyword creates a new name for an existing type.
+// It's like giving a nickname to a complex type to make code more readable.
+//
+// Syntax: using NewName = ExistingType;
+//
+// Examples:
+//   using Board = std::array<std::array<Cell, 3>, 3>;
+//   // Now "Board" means "3x3 array of Cell"
+//
+//   using Strategy = Position(*)(const Board&, Cell);
+//   // Now "Strategy" means "pointer to function taking Board and Cell, returning Position"
+//
+// Benefits:
+//   - More readable code (Board vs std::array<std::array<Cell, 3>, 3>)
+//   - Single place to change if the underlying type changes
+//   - Documents intent (what the type represents, not just what it is)
+//
+// This is similar to type aliases in functional languages:
+//   type Board = [[Cell]]  -- Haskell
+//   type Board = Cell[][]  -- TypeScript
+// ============================================================================
+
 // Board is just data - a 3x3 array of cells
 using Board = std::array<std::array<Cell, 3>, 3>;
 
@@ -87,8 +112,8 @@ constexpr std::array<std::array<Position, 3>, 8> winningLines = {{
     {{{0, 2}, {1, 1}, {2, 0}}}
 }};
 
-// Corner positions for strategy
-constexpr std::array<Position, 4> corners = {{{0, 0}, {0, 2}, {2, 0}, {2, 2}}};
+// Type alias for iterator over winning lines (used by checkWinner helper)
+using WinningLinesIterator = std::array<std::array<Position, 3>, 8>::const_iterator;
 
 // ============================================================================
 // Pure Functions - no side effects, same input = same output
@@ -151,39 +176,21 @@ Cell lineWinner(const Board& board, const std::array<Position, 3>& line);
 bool isWinningLine(const Board& board, const std::array<Position, 3>& line);
 
 // ============================================================================
-// Functional Combinators
+// Helper Functions for Expression-Based Code
 //
-// These functions let us write expression-based code without statements.
-// Instead of:
-//   auto it = std::find_if(container.begin(), container.end(), pred);
-//   return (it != container.end()) ? *it : defaultValue;
-//
-// We write:
-//   return findFirstOr(container, pred, defaultValue);
-//
-// This is how functional languages work - everything is an expression.
+// These small functions help us avoid intermediate variables.
+// Each takes data and returns a result - no side effects.
 // ============================================================================
 
-// Find first element matching predicate, or return default
-template<typename Container, typename Pred>
-typename Container::value_type findFirstOr(
-    const Container& container,
-    Pred predicate,
-    typename Container::value_type defaultValue);
+// Select random position from moves, or return invalid position if empty
+Position randomFromMoves(const std::vector<Position>& moves);
 
-// Filter container, returning new vector of matching elements
-template<typename Container, typename Pred>
-std::vector<typename Container::value_type> filter(
-    const Container& container,
-    Pred predicate);
+// Select first position from moves, or return invalid position if empty
+Position firstFromMoves(const std::vector<Position>& moves);
 
-// Find first element matching predicate, or call fallback function
-// The fallback is only evaluated if no match is found (lazy evaluation)
-template<typename Container, typename Pred, typename Fallback>
-typename Container::value_type findFirstOrElse(
-    const Container& container,
-    Pred predicate,
-    Fallback fallback);
+// Convert winning lines iterator to winner Cell (helper for checkWinner)
+Cell iteratorToWinner(const Board& board, WinningLinesIterator it, WinningLinesIterator end);
+
 
 // ============================================================================
 // Higher-Order Functions - functions that take/return functions
@@ -194,6 +201,14 @@ using Strategy = Position(*)(const Board& board, Cell player);
 
 // Select a strategy based on current player (pure function for strategy dispatch)
 Strategy selectStrategy(Cell player, Strategy xStrategy, Strategy oStrategy);
+
+// Continue game from optional board result (helper for playGameStep)
+std::pair<Board, Cell> continueFromMove(
+    std::optional<Board> maybeBoard,
+    Cell player,
+    Strategy xStrategy,
+    Strategy oStrategy,
+    std::pair<Board, Cell> fallback);
 
 // Play a complete game with two strategies
 // Returns pair of (final board, winner)
@@ -208,8 +223,5 @@ Position randomStrategy(const Board& board, Cell player);
 
 // First available move (top-left to bottom-right)
 Position firstAvailableStrategy(const Board& board, Cell player);
-
-// Center-first strategy
-Position centerFirstStrategy(const Board& board, Cell player);
 
 #endif // TICTACTOE_FUNCTIONAL_H

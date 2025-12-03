@@ -88,14 +88,14 @@ int main() {
     std::cout << "Game 1 (Random vs Random):\n" << boardToString(game1.first);
     std::cout << "Winner: " << (game1.second == Cell::Empty ? "Draw" : std::string(1, cellToChar(game1.second))) << "\n\n";
 
-    // Game 2: Center-First vs Random
-    std::pair<Board, Cell> game2 = playGame(centerFirstStrategy, randomStrategy);
-    std::cout << "Game 2 (Center-First vs Random):\n" << boardToString(game2.first);
+    // Game 2: First-Available vs Random
+    std::pair<Board, Cell> game2 = playGame(firstAvailableStrategy, randomStrategy);
+    std::cout << "Game 2 (First-Available vs Random):\n" << boardToString(game2.first);
     std::cout << "Winner: " << (game2.second == Cell::Empty ? "Draw" : std::string(1, cellToChar(game2.second))) << "\n\n";
 
-    // Game 3: Center-First vs Center-First
-    std::pair<Board, Cell> game3 = playGame(centerFirstStrategy, centerFirstStrategy);
-    std::cout << "Game 3 (Center-First vs Center-First):\n" << boardToString(game3.first);
+    // Game 3: First-Available vs First-Available
+    std::pair<Board, Cell> game3 = playGame(firstAvailableStrategy, firstAvailableStrategy);
+    std::cout << "Game 3 (First-Available vs First-Available):\n" << boardToString(game3.first);
     std::cout << "Winner: " << (game3.second == Cell::Empty ? "Draw" : std::string(1, cellToChar(game3.second))) << "\n\n";
 
     // ========================================================================

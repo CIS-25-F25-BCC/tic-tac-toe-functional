@@ -1,6 +1,6 @@
 #include "tictactoe.h"
-#include <algorithm>  // std::all_of, std::find_if, std::copy_if, std::count_if
-#include <iterator>   // std::back_inserter
+#include <algorithm>  // std::all_of, std::find_if, std::count_if
+#include <numeric>    // std::accumulate (fold)
 #include <cstdlib>
 #include <ctime>
 
@@ -145,46 +145,24 @@
 // ============================================================================
 
 // ============================================================================
-// Functional Combinator Implementations
+// Helper Function Implementations
 //
-// These template functions let us write expression-based code.
-// They wrap STL algorithms into single-expression forms.
+// These small functions help us write expression-based code.
+// Each function body is a single return expression - no statements.
 // ============================================================================
 
-template<typename Container, typename Pred>
-typename Container::value_type findFirstOr(
-    const Container& container,
-    Pred predicate,
-    typename Container::value_type defaultValue) {
-    // Find first matching element or return default - single expression
-    typename Container::const_iterator it = std::find_if(
-        container.begin(), container.end(), predicate);
-    return (it != container.end()) ? *it : defaultValue;
+Position randomFromMoves(const std::vector<Position>& moves) {
+    return moves.empty()
+        ? Position{-1, -1}
+        : moves[rand() % moves.size()];
 }
 
-template<typename Container, typename Pred>
-std::vector<typename Container::value_type> filter(
-    const Container& container,
-    Pred predicate) {
-    // Filter elements matching predicate - single expression using IIFE
-    return [&]() {
-        std::vector<typename Container::value_type> result;
-        std::copy_if(container.begin(), container.end(),
-            std::back_inserter(result), predicate);
-        return result;
-    }();
+Position firstFromMoves(const std::vector<Position>& moves) {
+    return moves.empty() ? Position{-1, -1} : moves[0];
 }
 
-template<typename Container, typename Pred, typename Fallback>
-typename Container::value_type findFirstOrElse(
-    const Container& container,
-    Pred predicate,
-    Fallback fallback) {
-    // Find first matching element, or call fallback function
-    // Fallback is only called if nothing matches (lazy evaluation)
-    typename Container::const_iterator it = std::find_if(
-        container.begin(), container.end(), predicate);
-    return (it != container.end()) ? *it : fallback();
+Cell iteratorToWinner(const Board& board, WinningLinesIterator it, WinningLinesIterator end) {
+    return (it != end) ? lineWinner(board, *it) : Cell::Empty;
 }
 
 // ============================================================================
@@ -325,15 +303,12 @@ bool isWinningLine(const Board& board, const std::array<Position, 3>& line) {
 // ============================================================================
 
 Cell checkWinner(const Board& board) {
-    // Find the first winning line (if any exists) and return the winner
-    // Using findFirstOr combinator - pure expression, no intermediate variables
-    //
-    // We find the first line that has a winner, defaulting to an empty line
-    // Then get the winner from that line (will be Cell::Empty if no winner)
-    return lineWinner(board,
-        findFirstOr(winningLines,
-            [&](const std::array<Position, 3>& line) { return isWinningLine(board, line); },
-            std::array<Position, 3>{{{0,0}, {0,0}, {0,0}}}));  // Default: dummy line
+    // Find the first winning line and return its winner, or Cell::Empty if none
+    // Using iteratorToWinner helper - pure expression, no intermediate variables
+    return iteratorToWinner(board,
+        std::find_if(winningLines.begin(), winningLines.end(),
+            [&](const std::array<Position, 3>& line) { return isWinningLine(board, line); }),
+        winningLines.end());
 }
 
 bool isFull(const Board& board) {
@@ -402,9 +377,17 @@ int countMoves(const Board& board) {
 
 std::vector<Position> getValidMoves(const Board& board) {
     // Return all empty positions (valid moves)
-    // Using filter combinator - single expression, no intermediate variables
-    return filter(allPositions,
-        [&](const Position& p) { return isEmpty(board, p); });
+    // Using std::accumulate (fold) to build vector - pure expression
+    // The comma operator (expr1, expr2) evaluates expr1, then returns expr2
+    // So (acc.push_back(p), std::move(acc)) appends and returns in one expression
+    return std::accumulate(
+        allPositions.begin(), allPositions.end(),
+        std::vector<Position>{},
+        [&](std::vector<Position> acc, const Position& p) {
+            return isEmpty(board, p)
+                ? (acc.push_back(p), std::move(acc))
+                : std::move(acc);
+        });
 }
 
 // Helper: convert one row to a string (defined at file scope to avoid statement)
@@ -448,6 +431,21 @@ Strategy selectStrategy(Cell player, Strategy xStrategy, Strategy oStrategy) {
     return (player == Cell::X) ? xStrategy : oStrategy;
 }
 
+// Forward declaration for mutual recursion
+std::pair<Board, Cell> playGameStep(const Board& board, Cell player,
+                                     Strategy xStrategy, Strategy oStrategy);
+
+std::pair<Board, Cell> continueFromMove(
+    std::optional<Board> maybeBoard,
+    Cell player,
+    Strategy xStrategy,
+    Strategy oStrategy,
+    std::pair<Board, Cell> fallback) {
+    return maybeBoard
+        ? playGameStep(*maybeBoard, nextPlayer(player), xStrategy, oStrategy)
+        : fallback;
+}
+
 // Helper function for the recursive game loop
 // This is an internal function - users call playGame() instead
 std::pair<Board, Cell> playGameStep(const Board& board, Cell player,
@@ -462,18 +460,12 @@ std::pair<Board, Cell> playGameStep(const Board& board, Cell player,
     //       else case makeMove board (strategy board player) player of
     //              Just newBoard -> playGameStep newBoard (nextPlayer player) xStrat oStrat
     //              Nothing -> (board, Empty)
-    //
-    // Note: C++23 has .transform() but we use IIFE for C++17 compatibility
     return isGameOver(board)
         ? std::pair{board, checkWinner(board)}
-        : [&]() {
-            std::optional<Board> newBoard = makeMove(board,
-                selectStrategy(player, xStrategy, oStrategy)(board, player),
-                player);
-            return newBoard
-                ? playGameStep(*newBoard, nextPlayer(player), xStrategy, oStrategy)
-                : std::pair{board, Cell::Empty};
-          }();
+        : continueFromMove(
+              makeMove(board, selectStrategy(player, xStrategy, oStrategy)(board, player), player),
+              player, xStrategy, oStrategy,
+              std::pair{board, Cell::Empty});
 }
 
 std::pair<Board, Cell> playGame(Strategy xStrategy, Strategy oStrategy) {
@@ -490,37 +482,12 @@ std::pair<Board, Cell> playGame(Strategy xStrategy, Strategy oStrategy) {
 
 Position randomStrategy(const Board& board, Cell player) {
     (void)player;  // Unused - strategy doesn't depend on which player
-    // Single expression using IIFE to avoid intermediate variable
-    return [&]() {
-        std::vector<Position> moves = getValidMoves(board);
-        return moves.empty()
-            ? Position{-1, -1}
-            : moves[rand() % moves.size()];
-    }();
+    // Single expression: get valid moves, pass to helper that selects random one
+    return randomFromMoves(getValidMoves(board));
 }
 
 Position firstAvailableStrategy(const Board& board, Cell player) {
     (void)player;  // Unused
-    // Single expression using IIFE
-    return [&]() {
-        std::vector<Position> moves = getValidMoves(board);
-        return moves.empty()
-            ? Position{-1, -1}
-            : moves[0];
-    }();
-}
-
-Position centerFirstStrategy(const Board& board, Cell player) {
-    (void)player;  // Unused
-    // Nested ternary expression: try center, then corners, then first available
-    // Using isEmpty for Position-based access and findFirstOrElse combinator
-    //
-    // This reads as:
-    //   if center is empty then center
-    //   else find first empty corner, falling back to first available move
-    return isEmpty(board, Position{1, 1})
-        ? Position{1, 1}
-        : findFirstOrElse(corners,
-              [&](const Position& p) { return isEmpty(board, p); },
-              [&]() { return firstAvailableStrategy(board, player); });
+    // Single expression: get valid moves, pass to helper that selects first one
+    return firstFromMoves(getValidMoves(board));
 }
