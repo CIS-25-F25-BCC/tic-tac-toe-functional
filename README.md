@@ -38,29 +38,35 @@ make
 ### 1. Pure Functions
 ```cpp
 // Pure: only depends on inputs, no side effects
-char checkWinner(const Board& board);
+Cell checkWinner(const Board& board);
 bool isFull(const Board& board);
 ```
 
 ### 2. Immutability
 ```cpp
 // Returns NEW board, doesn't modify input
-Board makeMove(const Board& board, int row, int col, char player);
+// Returns std::optional - empty if move is invalid
+std::optional<Board> makeMove(const Board& board, Position pos, Cell player);
 
 // Original board unchanged:
-Board after1 = makeMove(empty, 0, 0, 'X');  // empty still empty!
-Board after2 = makeMove(after1, 1, 1, 'O'); // after1 still has just X
+std::optional<Board> after1 = makeMove(empty, Position{0, 0}, Cell::X);
+std::optional<Board> after2 = makeMove(*after1, Position{1, 1}, Cell::O);
 ```
 
 ### 3. Easy Undo/Branching
 ```cpp
-// Want to undo? Just use the previous board
-Board current = after2;
-current = after1;  // "Undo" - after2 still exists if needed
-
 // Want to explore alternatives? Branch from any state
-Board branch1 = makeMove(after1, 0, 1, 'O');  // O plays differently
-Board branch2 = makeMove(after1, 2, 2, 'O');  // Another option
+std::optional<Board> branch1 = makeMove(*after1, Position{0, 1}, Cell::O);
+std::optional<Board> branch2 = makeMove(*after1, Position{2, 2}, Cell::O);
+// Both branches exist simultaneously!
+```
+
+### 4. Expression-Based Style
+```cpp
+// Every function is a single return expression - no statements
+Position randomStrategy(const Board& board, Cell player) {
+    return randomFromMoves(getValidMoves(board));
+}
 ```
 
 ## Course Information
